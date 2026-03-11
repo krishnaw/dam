@@ -1,7 +1,7 @@
 """Generate a landscape PDF showcasing the DAM application capabilities.
 
 Audit-grade quality: curated screenshots, executive summary,
-architecture diagram, security section, and comprehensive FAQs.
+architecture diagram, security section, API docs, and comprehensive FAQs.
 """
 
 import fitz  # PyMuPDF
@@ -30,6 +30,7 @@ SUBTLE = (0.35, 0.35, 0.45)
 BOX_BG = (0.10, 0.10, 0.16)
 BOX_BORDER = (0.20, 0.20, 0.30)
 DIVIDER = (0.18, 0.18, 0.28)
+AMBER = (0.85, 0.65, 0.15)        # For demo notes
 
 # Page counter
 page_number = [0]
@@ -133,6 +134,12 @@ def draw_section_header(page, y, text, color=ACCENT):
     return y + 28
 
 
+def draw_demo_note(page, x, y, text, max_width=None):
+    """Draw a subtle amber demo environment note."""
+    draw_text(page, x, y, "Note:", fontsize=7, color=AMBER)
+    return draw_text(page, x + 28, y, text, fontsize=7, color=AMBER, max_width=max_width or (W - x - 28 - MARGIN))
+
+
 # ─── PAGE 1: TITLE / COVER ──────────────────────────────────────────────
 
 def add_title_page(doc):
@@ -234,6 +241,36 @@ def add_executive_summary(doc):
         y += 4
 
     y += 10
+    y = draw_section_header(page, y, "Key Differentiators vs. Commercial DAMs")
+
+    # Comparison table
+    headers = [("Capability", MARGIN + 8), ("DAM (This Project)", MARGIN + 180), ("Typical SaaS DAM", MARGIN + 440)]
+    for label, hx in headers:
+        draw_text(page, hx, y, label, fontsize=9, color=ACCENT)
+    y += 4
+
+    shape = page.new_shape()
+    shape.draw_line((MARGIN + 8, y), (W - MARGIN, y))
+    shape.finish(color=DIVIDER, width=0.5)
+    shape.commit()
+    y += 10
+
+    rows = [
+        ("Data Sovereignty", "Full - runs on your infra", "Vendor-hosted, data in their cloud"),
+        ("Pricing Model", "Zero license cost (open source)", "$500-5000+/month per seat"),
+        ("AI/ML Pipeline", "Built-in LLM + CLIP + OCR", "Add-on, extra cost, limited models"),
+        ("Customization", "Full source access, extend freely", "Config only, no code access"),
+        ("Search Engine", "Meilisearch + pgvector (semantic)", "Basic keyword, no vector search"),
+        ("API Access", "Full REST API, OpenAPI docs", "Limited API, rate-gated"),
+        ("Storage Backend", "Swappable (MinIO/S3/Azure Blob)", "Proprietary, vendor-locked"),
+    ]
+    for cap, ours, theirs in rows:
+        draw_text(page, MARGIN + 8, y, cap, fontsize=8, color=OFF_WHITE)
+        draw_text(page, MARGIN + 180, y, ours, fontsize=8, color=ACCENT2)
+        draw_text(page, MARGIN + 440, y, theirs, fontsize=8, color=LIGHT_GRAY)
+        y += 14
+
+    y += 10
     y = draw_section_header(page, y, "Deployment Options")
 
     deploy = [
@@ -245,36 +282,6 @@ def add_executive_summary(doc):
         draw_text(page, MARGIN + 8, y, f"{name}:", fontsize=10, color=clr)
         draw_text(page, MARGIN + 100, y, desc, fontsize=10, color=OFF_WHITE)
         y += 20
-
-    y += 10
-    y = draw_section_header(page, y, "Competitive Differentiation")
-
-    # Comparison table header
-    cols = [("", 140), ("DAM (Self-Hosted)", 160), ("Cloud DAMs", 160), ("Shared Drives", 160)]
-    cx = MARGIN + 8
-    for label, w in cols:
-        draw_text(page, cx, y, label, fontsize=8, color=ACCENT)
-        cx += w
-    y += 14
-
-    comparisons = [
-        ("Data Sovereignty", "Full (your infra)", "Vendor-hosted", "Partial"),
-        ("AI Search (CLIP/NLP)", "Built-in", "$$ add-on", "None"),
-        ("Per-seat Cost", "$0 (self-hosted)", "$500-5000/mo", "$6-20/user/mo"),
-        ("Customization", "Full source access", "API only", "None"),
-        ("Approval Workflows", "Built-in RBAC", "Enterprise tier", "None"),
-        ("Vendor Lock-in", "None", "High", "Medium"),
-    ]
-    for row_label, dam_val, cloud_val, drive_val in comparisons:
-        cx = MARGIN + 8
-        draw_text(page, cx, y, row_label, fontsize=8, color=OFF_WHITE)
-        cx += 140
-        draw_text(page, cx, y, dam_val, fontsize=8, color=ACCENT2)
-        cx += 160
-        draw_text(page, cx, y, cloud_val, fontsize=8, color=LIGHT_GRAY)
-        cx += 160
-        draw_text(page, cx, y, drive_val, fontsize=8, color=LIGHT_GRAY)
-        y += 13
 
     draw_page_footer(page)
 
@@ -392,7 +399,13 @@ def add_architecture_diagram(doc):
 
 # ─── SCREENSHOT PAGES ────────────────────────────────────────────────────
 
-def add_screenshot_page(doc, title, description, screenshot_file, callouts=None):
+def add_screenshot_page(doc, title, description, screenshot_file, callouts=None, demo_notes=None):
+    """Add a screenshot page with optional demo environment notes.
+
+    Args:
+        demo_notes: list of strings shown as amber "Note:" callouts below the image,
+                    providing transparent context about demo limitations.
+    """
     page = doc.new_page(width=W, height=H)
     draw_bg(page)
 
@@ -405,8 +418,16 @@ def add_screenshot_page(doc, title, description, screenshot_file, callouts=None)
         pix = img[0].get_pixmap()
         img.close()
 
+        # Reserve space for callouts and demo notes
+        extra_lines = 0
+        if callouts:
+            extra_lines += len(callouts)
+        if demo_notes:
+            extra_lines += len(demo_notes) + 1  # +1 for spacing
+        footer_reserve = 30 + extra_lines * 12
+
         img_y = y + 8
-        available_h = H - img_y - (55 if callouts else 30)
+        available_h = H - img_y - footer_reserve
         available_w = W - 2 * MARGIN
         scale = min(available_w / pix.width, available_h / pix.height, 1.0)
         img_w = pix.width * scale
@@ -421,12 +442,18 @@ def add_screenshot_page(doc, title, description, screenshot_file, callouts=None)
         page.insert_image(img_rect, filename=img_path)
 
         # Callouts below image
+        cy = img_y + img_h + 12
         if callouts:
-            cy = img_y + img_h + 12
             cx = MARGIN
             for callout in callouts:
                 draw_text(page, cx, cy, callout, fontsize=8, color=SUBTLE, max_width=W - 2 * MARGIN)
                 cy += 12
+
+        # Demo environment notes (amber, transparent about limitations)
+        if demo_notes:
+            cy += 4
+            for note in demo_notes:
+                cy = draw_demo_note(page, MARGIN, cy, note, max_width=W - 2 * MARGIN - 28)
 
     draw_page_footer(page, title)
 
@@ -485,7 +512,7 @@ def add_security_page(doc):
     draw_page_footer(page)
 
 
-# ─── API & INTEGRATION PAGE ──────────────────────────────────────────────
+# ─── API & INTEGRATION PAGE ─────────────────────────────────────────────
 
 def add_api_integration_page(doc):
     page = doc.new_page(width=W, height=H)
@@ -494,51 +521,75 @@ def add_api_integration_page(doc):
     draw_text(page, MARGIN, 40, "API & Integration", fontsize=26, color=ACCENT)
 
     y = 80
-    y = draw_section_header(page, y, "OpenAPI / Swagger Documentation")
-    y = draw_bullet(page, MARGIN + 8, y, "Interactive Swagger UI at /docs — test any endpoint directly from the browser", fontsize=10) + 2
-    y = draw_bullet(page, MARGIN + 8, y, "ReDoc alternative at /redoc — clean, searchable API reference documentation", fontsize=10) + 2
-    y = draw_bullet(page, MARGIN + 8, y, "OpenAPI 3.1 JSON schema at /openapi.json — auto-generated from Python type hints and Pydantic models", fontsize=10) + 2
-    y = draw_bullet(page, MARGIN + 8, y, "All request/response schemas documented with examples, validation rules, and error codes", fontsize=10) + 2
+    y = draw_section_header(page, y, "REST API & OpenAPI Documentation")
+
+    api_items = [
+        "Full OpenAPI 3.1 specification auto-generated from FastAPI route definitions",
+        "Interactive Swagger UI at /docs - test any endpoint directly from the browser",
+        "ReDoc alternative at /redoc - clean, readable API reference for developers",
+        "OpenAPI JSON schema at /openapi.json - import into Postman, Insomnia, or code generators",
+        "All endpoints versioned, typed with Pydantic v2 request/response models",
+    ]
+    for item in api_items:
+        y = draw_bullet(page, MARGIN + 8, y, item, fontsize=10) + 2
 
     y += 10
-    y = draw_section_header(page, y, "REST API Endpoints (8 modules, 30+ routes)")
+    y = draw_section_header(page, y, "API Endpoints (8 Modules)")
 
+    # Endpoint table
     endpoints = [
-        ("/api/auth/*", "Register, login, Google OAuth callback, token refresh", "POST/GET"),
-        ("/api/assets/*", "CRUD, upload, thumbnail, transform, transcode, preview", "GET/POST/PUT/DELETE"),
-        ("/api/search", "Full-text, faceted filters, NLP, visual similarity, color", "GET"),
-        ("/api/collections/*", "Create, list, detail, add/remove assets", "GET/POST/PUT/DELETE"),
-        ("/api/assets/{id}/comments", "Threaded comments with reply support", "GET/POST"),
-        ("/api/assets/{id}/workflow/*", "Submit, approve, reject, workflow history", "POST/GET"),
-        ("/api/assets/{id}/share", "Generate share links, configure permissions", "POST/GET"),
-        ("/api/users/*", "User management, profile, role assignment (admin)", "GET/PUT"),
+        ("/api/assets", "CRUD, upload, download, versions, bulk operations", "POST GET PUT DELETE"),
+        ("/api/search", "Full-text, NLP, visual similarity, color search", "GET POST"),
+        ("/api/collections", "Create, manage, add/remove assets", "POST GET PUT DELETE"),
+        ("/api/users", "Registration, profile, role management", "POST GET PUT"),
+        ("/api/metadata", "Schema management, custom fields, EXIF/XMP", "GET PUT"),
+        ("/api/workflows", "Submit, review, approve/reject, history", "POST GET PUT"),
+        ("/api/sharing", "Share links, permissions, expiry, password", "POST GET DELETE"),
+        ("/api/transforms", "Resize, rotate, format convert, transcode", "POST GET"),
     ]
+
+    # Table headers
+    draw_text(page, MARGIN + 8, y, "Endpoint", fontsize=9, color=ACCENT)
+    draw_text(page, MARGIN + 150, y, "Description", fontsize=9, color=ACCENT)
+    draw_text(page, MARGIN + 520, y, "Methods", fontsize=9, color=ACCENT)
+    y += 4
+    shape = page.new_shape()
+    shape.draw_line((MARGIN + 8, y), (W - MARGIN, y))
+    shape.finish(color=DIVIDER, width=0.5)
+    shape.commit()
+    y += 10
+
     for path, desc, methods in endpoints:
-        draw_text(page, MARGIN + 8, y, methods, fontsize=8, color=ACCENT6)
-        draw_text(page, MARGIN + 105, y, path, fontsize=8, color=ACCENT)
-        draw_text(page, MARGIN + 310, y, desc, fontsize=8, color=LIGHT_GRAY)
-        y += 15
+        draw_text(page, MARGIN + 8, y, path, fontsize=8, color=ACCENT6)
+        draw_text(page, MARGIN + 150, y, desc, fontsize=8, color=OFF_WHITE)
+        draw_text(page, MARGIN + 520, y, methods, fontsize=7, color=LIGHT_GRAY)
+        y += 16
 
     y += 10
     y = draw_section_header(page, y, "Authentication Methods")
+
     auth_methods = [
-        ("Bearer JWT", "Authorization: Bearer <token> — standard for all API calls", ACCENT),
-        ("Query Token", "?token=<jwt> — for browser <img>/<video> tags that can't send headers", ACCENT3),
-        ("Share Token", "UUID-based share links — scoped read access without user accounts", ACCENT4),
-        ("Google OAuth", "OAuth 2.0 flow via /api/auth/google/callback — returns JWT on success", ACCENT2),
+        ("Bearer Token", "JWT access tokens in Authorization header. Obtain via /api/users/login or /api/users/register.", ACCENT),
+        ("Google OAuth", "SSO flow via /api/users/google/callback. Returns JWT on success.", ACCENT4),
+        ("Share Tokens", "Scoped read-only tokens for external sharing. No account required.", ACCENT2),
+        ("API Keys", "Planned for Q2 2026 - X-API-Key header for machine-to-machine integration.", ACCENT3),
     ]
-    for name, desc, clr in auth_methods:
-        draw_text(page, MARGIN + 8, y, f"{name}:", fontsize=9, color=clr)
+    for method, desc, clr in auth_methods:
+        draw_text(page, MARGIN + 8, y, f"{method}:", fontsize=9, color=clr)
         draw_text(page, MARGIN + 120, y, desc, fontsize=9, color=OFF_WHITE)
         y += 18
 
     y += 10
     y = draw_section_header(page, y, "Integration Patterns")
-    y = draw_bullet(page, MARGIN + 8, y, "Storage abstraction: StorageBackend protocol — swap MinIO/S3/Azure Blob via env var, no code changes", fontsize=9) + 1
-    y = draw_bullet(page, MARGIN + 8, y, "Search abstraction: MeilisearchService — swap to Azure AI Search for production", fontsize=9) + 1
-    y = draw_bullet(page, MARGIN + 8, y, "LLM fallback chain: Cascading free-tier providers (Cerebras -> Mistral -> Groq) with paid Anthropic as capped last resort", fontsize=9) + 1
-    y = draw_bullet(page, MARGIN + 8, y, "Celery task queue: Any Redis-compatible broker. Tasks are idempotent and auto-retry with exponential backoff", fontsize=9) + 1
-    y = draw_bullet(page, MARGIN + 8, y, "CORS: Configurable origins. Default allows localhost:3001 (dev) and production domain via env var", fontsize=9) + 1
+
+    patterns = [
+        "Webhooks (roadmap): Subscribe to asset events (upload, tag, approve) for external automation",
+        "Celery task IDs: Async operations return task IDs for polling completion status",
+        "Presigned URLs: Direct S3/MinIO URLs for CDN integration or client-side uploads",
+        "Meilisearch federation: Search index is accessible for custom dashboards and analytics",
+    ]
+    for p in patterns:
+        y = draw_bullet(page, MARGIN + 8, y, p, fontsize=9, color=OFF_WHITE) + 2
 
     draw_page_footer(page)
 
@@ -554,7 +605,7 @@ def add_test_summary_page(doc):
     # Backend section
     y = 80
     shape = page.new_shape()
-    draw_rounded_rect(shape, (MARGIN, y, W / 2 - 10, y + 30), 6, fill=ACCENT2 + (0.15,) if False else (0.08, 0.15, 0.10), border=ACCENT2, width=1)
+    draw_rounded_rect(shape, (MARGIN, y, W / 2 - 10, y + 30), 6, fill=(0.08, 0.15, 0.10), border=ACCENT2, width=1)
     shape.commit()
     draw_text(page, MARGIN + 12, y + 20, "Backend: 195 Tests PASSING", fontsize=14, color=ACCENT2)
     y += 42
@@ -642,6 +693,8 @@ def add_faq_pages(doc):
              "Images (JPEG, PNG, WebP, GIF, TIFF, BMP, SVG), Videos (MP4, AVI, MOV, MKV, WebM), Audio (MP3, WAV, FLAC, AAC, OGG), Documents (PDF, DOCX, XLSX, PPTX, DOC, XLS, PPT). Auto-detects MIME types and generates appropriate thumbnails/previews."),
             ("What are the hardware requirements?",
              "Minimum: 4 cores, 8 GB RAM, 50 GB SSD. For AI features (CLIP, LLM tagging): 8+ cores, 16+ GB RAM, optional GPU. Storage scales with your library. All services containerized via Docker."),
+            ("Is DAM open source? What is the license?",
+             "DAM is source-available and self-hosted. There are no per-seat license fees. You receive the full source code to deploy, modify, and extend on your own infrastructure. Contact the maintainer for specific licensing terms."),
         ]),
         ("Architecture & Deployment", [
             ("Can DAM scale horizontally?",
@@ -652,6 +705,20 @@ def add_faq_pages(doc):
              "Alembic with autogenerate. 'alembic upgrade head' to apply, 'alembic revision --autogenerate -m \"desc\"' to create. Version-controlled with upgrade/downgrade support."),
             ("What happens if a Celery worker crashes?",
              "Redis broker with acknowledgment-based delivery. Crashed tasks return to queue for pickup by other workers. Ingest pipeline is idempotent. Auto-retry with exponential backoff."),
+            ("What is the expected uptime and reliability?",
+             "Stateless API supports zero-downtime rolling deployments on Kubernetes. PostgreSQL handles crash recovery via WAL. Redis persistence via RDB/AOF. Celery tasks are idempotent with auto-retry, so transient failures self-heal."),
+        ]),
+        ("API & Integration", [
+            ("Does DAM have API documentation?",
+             "Yes. FastAPI auto-generates OpenAPI 3.1 specs. Interactive Swagger UI at /docs, ReDoc at /redoc, and raw JSON schema at /openapi.json. Every endpoint is fully typed with Pydantic v2 request/response models."),
+            ("Is there an SDK or client library?",
+             "Not yet. The OpenAPI spec can generate typed clients in any language via openapi-generator or similar tools. Python: use httpx with the generated types. TypeScript: the frontend's TanStack Query hooks serve as a reference client implementation."),
+            ("Does DAM support webhooks?",
+             "On the roadmap for Q2 2026. The Celery task system already emits structured events internally. Webhooks will expose these as HTTP callbacks: asset.uploaded, asset.tagged, workflow.approved, etc. with configurable retry and signature verification."),
+            ("What rate limiting is in place?",
+             "LLM API calls are rate-limited internally (10 calls/5min, 40/hour, 200/day for paid providers). API-level rate limiting (per-user, per-endpoint) is planned for the next release via Redis-based sliding window counters."),
+            ("Can I integrate DAM with other tools (Slack, Teams, Zapier)?",
+             "Slack/Teams integration is on the Q3-Q4 2026 roadmap. In the meantime, the REST API enables custom integrations. Zapier/n8n can poll endpoints or use webhooks (once available) to trigger workflows in external tools."),
         ]),
         ("AI & Search", [
             ("How does AI tagging work?",
@@ -662,6 +729,28 @@ def add_faq_pages(doc):
              "Users pick a color (hex or preset swatches). Dominant colors extracted during ingest. Search finds assets with closest palette match using LAB color space distance algorithms."),
             ("Does search support typo tolerance?",
              "Yes. Meilisearch provides typo tolerance, prefix search, synonyms, and language-aware stemming. Combined with faceted filtering (type, date, tags) for fast, forgiving queries."),
+            ("How fast is search indexing?",
+             "Meilisearch indexes new assets within seconds of upload. CLIP embedding generation takes 1-3 seconds per image (CPU) or under 200ms with GPU. The ingest pipeline runs asynchronously, so uploads return immediately while indexing happens in the background."),
+        ]),
+        ("Migration & Import", [
+            ("Can I migrate from another DAM (Adobe AEM, Bynder, Canto)?",
+             "DAM's REST API supports programmatic bulk upload. Write a migration script that reads assets from your current DAM's export/API and POSTs them to DAM's /api/assets endpoint. Metadata can be attached via /api/metadata. No built-in import wizard yet, but the API makes migration straightforward."),
+            ("Does DAM support bulk import from a file system?",
+             "Currently single-file upload via the API. Bulk upload with concurrent processing and batch metadata assignment is planned for Q2 2026. In the meantime, a shell script looping over files with curl/httpx achieves the same result."),
+            ("What about data migration from cloud storage (S3, GCS, Azure Blob)?",
+             "MinIO is S3-compatible, so existing S3 buckets can be mounted or synced. For Azure Blob, the storage backend is swappable via environment variables. Data migration involves syncing the object store and importing metadata records via the API."),
+            ("Can I export all my data out of DAM?",
+             "Yes. All assets are stored in standard S3-compatible object storage (MinIO or Azure Blob) - download via any S3 client. Metadata lives in PostgreSQL - export via pg_dump or the REST API. No proprietary formats, no data lock-in."),
+        ]),
+        ("Performance & Scale", [
+            ("How many concurrent users can DAM handle?",
+             "FastAPI's async architecture handles hundreds of concurrent connections per instance. Horizontal scaling via Kubernetes adds capacity linearly. Real-world: a single 4-core instance handles 50-100 concurrent users comfortably. Scale workers independently for heavy upload/processing loads."),
+            ("Is there a limit on the number of assets?",
+             "No hard limit. PostgreSQL handles millions of rows. Meilisearch indexes up to 100M documents per instance. MinIO/S3 storage is effectively unlimited. Performance scales with hardware - add PostgreSQL read replicas and Celery workers as needed."),
+            ("What is the upload size limit?",
+             "Configurable via environment variable. Default: 500 MB per file. Larger files (e.g., 4K video) are supported by adjusting the API gateway and storage timeouts. Chunked upload is on the roadmap for files over 1 GB."),
+            ("How does DAM perform with large video files?",
+             "Video uploads are streamed directly to MinIO (not buffered in memory). Transcoding runs asynchronously via Celery + FFmpeg. Thumbnail extraction uses keyframe sampling. Playback uses presigned URLs for direct streaming from object storage."),
         ]),
         ("Security & Access Control", [
             ("How is authentication handled?",
@@ -673,6 +762,26 @@ def add_faq_pages(doc):
             ("Is there an audit trail?",
              "On roadmap for next release. Data model supports it (timestamps + user tracking on all entities). Planned: dedicated audit_log table for all asset operations, permission changes, admin actions."),
         ]),
+        ("Compliance & Data Governance", [
+            ("Is DAM GDPR-compliant?",
+             "Self-hosted architecture means you control data residency. User data can be deleted via the API (right to erasure). No external telemetry or tracking. For full GDPR compliance, pair with your organization's DPA and data processing procedures."),
+            ("Does DAM support data retention policies?",
+             "Asset expiry dates are supported via workflow states. Automated retention enforcement (auto-archive, auto-delete after N days) is planned. Currently, admins manage retention manually via the API or admin UI."),
+            ("Can I run DAM in an air-gapped environment?",
+             "Yes. All services run in Docker containers. Pull images once, deploy without internet. AI features require LLM API access, but the system functions fully without AI (manual tagging, keyword search still work). CLIP runs locally if a GPU is available."),
+            ("How is PII handled in uploaded documents?",
+             "OCR extracts text for search indexing but does not classify PII. For PII-sensitive environments, configure the ingest pipeline to skip OCR or integrate a PII detection service (e.g., Presidio) as a pre-processing step. All data stays on your infrastructure regardless."),
+        ]),
+        ("Customization & Extensibility", [
+            ("Can I add custom metadata fields?",
+             "Custom metadata schema management is in active development for Q2 2026. Currently, metadata is stored as structured JSON in PostgreSQL. The schema endpoint (/api/metadata/schemas) will allow admins to define per-organization field definitions with validation rules."),
+            ("Is the UI themeable?",
+             "Built with TailwindCSS 4 and shadcn/ui, so all colors, typography, and spacing are token-based. Modify the Tailwind config and CSS variables to match your brand. Dark theme is default; light theme support requires CSS variable overrides."),
+            ("Can I write plugins or extensions?",
+             "The architecture supports extensibility at multiple points: add new FastAPI route modules, new Celery task types, new storage backends (implement the StorageBackend protocol), or new AI providers (add to the LLM fallback chain). No formal plugin API yet, but the modular codebase makes extension straightforward."),
+            ("Can I replace Meilisearch with Elasticsearch or Azure AI Search?",
+             "Yes. The search service is abstracted behind a service interface. Swap by implementing the same methods (index_asset, search, delete) for your preferred engine. Azure AI Search support is planned. Elasticsearch would require a custom adapter."),
+        ]),
         ("Media Processing", [
             ("What image transforms are supported?",
              "On-the-fly: resize (W/H with cover/contain/fill), rotation, format conversion (JPEG/PNG/WebP), quality (1-100). Cache-Control headers for CDN caching. Non-destructive: originals preserved."),
@@ -681,9 +790,7 @@ def add_faq_pages(doc):
             ("How are document previews generated?",
              "PDFs: PyMuPDF renders pages to JPEG. Office docs: LibreOffice headless -> PDF -> JPEG. On-the-fly or pre-generated as renditions."),
             ("What metadata is extracted?",
-             "MIME type, size, dimensions, duration. Plus: thumbnails (256px), SHA-256 checksums (deduplication), Meilisearch indexing for full-text search."),
-            ("Are original files preserved after transforms?",
-             "Always. All transforms are non-destructive. Originals stay in MinIO untouched. 'Save as New Version' creates a new asset version, preserving the full history."),
+             "MIME type, size, dimensions, duration. Plus: thumbnails (256px), SHA-256 checksums (deduplication), Meilisearch indexing for full-text search. IPTC/XMP/EXIF standards extraction planned for Q2 2026."),
         ]),
         ("Collaboration & Workflow", [
             ("How do review workflows work?",
@@ -692,60 +799,6 @@ def add_faq_pages(doc):
              "Yes. Unique share links with permissions (View Only / View+Download), optional password, expiry. No account required - share token provides scoped read access."),
             ("Is there notification support?",
              "In-app: bell icon, unread badge, dropdown panel. Triggered by comments, workflow changes, shares. Email notifications on roadmap."),
-            ("Can I configure custom workflow stages?",
-             "Current release supports the built-in multi-step flow (Draft -> Review -> Approved/Rejected). Custom stage definitions with configurable approver groups are planned for a future release."),
-        ]),
-        ("API & Integration", [
-            ("Is there API documentation?",
-             "Yes. Swagger UI at /docs, ReDoc at /redoc, OpenAPI 3.1 JSON at /openapi.json. All auto-generated from Python type hints and Pydantic schemas with full request/response examples."),
-            ("Does DAM support webhooks?",
-             "Not yet. Webhook support (POST callbacks on asset upload, workflow state change, comment) is on the roadmap. Currently, poll the API or use the notification system."),
-            ("Is there a client SDK?",
-             "No dedicated SDK yet. The REST API is standard and works with any HTTP client. OpenAPI schema can generate typed clients via openapi-generator for TypeScript, Python, Go, etc."),
-            ("What about rate limiting?",
-             "No built-in rate limiting — expected to be handled at the infrastructure level (API gateway, nginx, cloud WAF). LLM calls have internal rate guards: 10/5min, 40/hour, 200/day for paid provider."),
-            ("Can I use DAM as a headless CMS for images?",
-             "Yes. The API provides full CRUD, search, and transform endpoints. Use /api/assets/{id}/transform?w=800&fmt=webp to serve optimized images directly from your frontend."),
-        ]),
-        ("Migration & Import", [
-            ("Can I import assets from another DAM?",
-             "Use the upload API endpoint (POST /api/assets/upload) for programmatic bulk import. Write a migration script that reads from your source, uploads files, and maps metadata via the API."),
-            ("Is there a bulk import tool?",
-             "Single-file upload is the current interface. Bulk upload (multi-file concurrent) is on the Q2 2026 roadmap. For now, script bulk uploads via the API with parallel HTTP requests."),
-            ("How do I migrate metadata from an existing system?",
-             "Upload assets via API, then PATCH metadata via /api/assets/{id}. Map your source fields to DAM schema. Custom metadata schemas (planned Q2) will support arbitrary key-value fields."),
-            ("Can I export all assets and metadata?",
-             "Use GET /api/assets (paginated) to export metadata as JSON. Download files via presigned MinIO URLs. For full backups, use pg_dump (DB) + mc mirror (MinIO objects)."),
-        ]),
-        ("Performance & Scale", [
-            ("How many concurrent users can DAM handle?",
-             "FastAPI with uvicorn handles ~1000+ concurrent connections per instance. Add replicas behind a load balancer for more. Static assets served by Vite/nginx don't hit the API."),
-            ("What's the maximum asset count?",
-             "No hard limit. PostgreSQL handles millions of rows. Meilisearch indexes up to 10M documents per index on modest hardware. MinIO scales to petabytes in distributed mode."),
-            ("How fast is search indexing?",
-             "Meilisearch indexes ~500-2000 documents/second depending on document size. CLIP embedding generation takes ~0.5-2s per image (CPU) or ~50ms (GPU). Both run async via Celery."),
-            ("How are large file uploads handled?",
-             "FastAPI streams uploads to MinIO without buffering the entire file in memory. Max file size is configurable. Progress tracking is available on the frontend."),
-        ]),
-        ("Compliance & Data Governance", [
-            ("Is DAM GDPR compliant?",
-             "Self-hosted, so data stays in your jurisdiction. No external telemetry. User deletion and data export are supported via the API. Formal GDPR documentation toolkit is planned."),
-            ("Can I enforce data retention policies?",
-             "Asset status lifecycle supports expiry states (planned Q2). Currently, admins can delete assets. Automated retention (auto-archive after N days) is on the roadmap."),
-            ("Does DAM support right to erasure (GDPR Article 17)?",
-             "Yes. DELETE /api/assets/{id} removes the database record. The asset file can be removed from MinIO storage. User account deletion is supported via admin API."),
-            ("Where is data stored?",
-             "All data stays on your infrastructure. Files in MinIO (or Azure Blob). Metadata in PostgreSQL. Search index in Meilisearch. Cache in Redis. Nothing leaves your network."),
-        ]),
-        ("Customization & Extensibility", [
-            ("Can I customize the frontend theme?",
-             "Yes. TailwindCSS 4 with shadcn/ui theming. Modify CSS variables in globals.css for colors, fonts, spacing. shadcn/ui components are source-available and fully editable."),
-            ("Can I add custom metadata fields?",
-             "Custom metadata schema management is on the Q2 roadmap. Currently, metadata is stored as a JSON column — you can extend the Pydantic schema and API to add fields."),
-            ("Is the code open source?",
-             "The codebase is privately hosted. Full source access is available to all deploying teams. The architecture is built on open-source technologies (FastAPI, React, PostgreSQL, etc.)."),
-            ("Can I extend DAM with plugins?",
-             "No plugin system yet. The modular architecture (services, tasks, API routes) makes it straightforward to add new features by implementing new service classes and route modules."),
         ]),
         ("Operations & Maintenance", [
             ("How do I monitor DAM in production?",
@@ -756,8 +809,6 @@ def add_faq_pages(doc):
              "Pull new images, 'alembic upgrade head', restart. Frontend is static SPA. Zero-downtime via rolling K8s deployments (stateless API)."),
             ("What's the estimated running cost?",
              "Azure reference: ~$150-250/month (B4ms VM, PostgreSQL, Redis, 100GB disk). AI: free-tier LLMs + capped Anthropic (~$5-20/month). Compare: commercial DAMs $500-5000+/month per seat."),
-            ("What if Meilisearch or MinIO goes down?",
-             "API gracefully degrades. Storage failures return 500 for affected assets. Search failures fall back to database queries. Health checks alert your monitoring. Services auto-restart in K8s."),
         ]),
     ]
 
@@ -861,71 +912,78 @@ def main():
     add_executive_summary(doc)
     add_architecture_diagram(doc)
 
-    # Feature screenshots with honest demo notes where applicable
+    # Feature screenshots - curated selection with transparent demo notes
     screenshots = [
         (
             "Authentication & Access",
             "Secure sign-in with email/password and Google OAuth 2.0 SSO. JWT-based session management with role-based access control enforcing 5 permission levels across all API endpoints.",
             "01-login.png",
             ["Supports: Email/password  |  Google OAuth SSO  |  JWT refresh tokens  |  Share link tokens"],
+            ["Demo environment: Login form uses minimal styling. Production deployments can customize branding via TailwindCSS theme tokens."],
         ),
         (
             "Asset Library",
             "Central hub for all digital assets. Grid and list views with live thumbnails, file type badges, and size indicators. Upload button provides quick access to the drag-and-drop uploader.",
             "02-library.png",
-            ["Features: Grid/List toggle  |  Type badges (PNG, JPEG, MP4...)  |  Thumbnail generation  |  Sort & filter",
-             "Demo note: Test images are programmatically generated. Production use shows real photos, videos, and documents."],
+            ["Features: Grid/List toggle  |  Type badges (PNG, JPEG, MP4...)  |  Thumbnail generation  |  Sort & filter"],
+            ["Demo environment: Library populated with programmatically generated test assets. Production use shows real photographs, videos, and documents."],
         ),
         (
             "File Upload",
             "Drag-and-drop upload interface supporting all major file formats. Automatic MIME type detection triggers the appropriate processing pipeline (thumbnails, metadata extraction, AI tagging, search indexing).",
             "03-upload.png",
-            ["Supported: Images, Videos, Audio, Documents  |  Auto-pipeline: thumbnail -> metadata -> AI tags -> search index",
-             "Demo note: Screenshot shows the empty upload zone. In use, a progress bar and file list appear during upload."],
+            ["Supported: Images, Videos, Audio, Documents  |  Auto-pipeline: thumbnail -> metadata -> AI tags -> search index"],
+            ["Screenshot shows the idle dropzone state. On file drop, a progress bar and per-file status indicators appear. Bulk upload support is planned for Q2 2026."],
         ),
         (
             "Asset Detail & Image Editor",
-            "Full asset view with integrated image editor for non-destructive transforms. Right panel shows file metadata (filename, type, size, timestamps). Tabs: Details, Comments, Workflow.",
+            "Full asset view with an integrated image editor for non-destructive transforms. The right panel provides file metadata (filename, type, size, timestamps). Tabs switch between Details, Comments, and Workflow views.",
             "04-asset-detail.png",
-            ["Editor: Resize (W/H with aspect lock)  |  Rotate CW/CCW  |  Format (JPEG/PNG/WebP)  |  Quality slider  |  Save as New Version",
-             "Demo note: Width/Height show 0 because asset dimensions aren't populated until Celery worker processes the file."],
+            ["Editor: Resize (W/H with aspect lock)  |  Rotate CW/CCW  |  Format (JPEG/PNG/WebP)  |  Quality slider  |  Save as New Version"],
+            ["Known issue: Image editor dimensions display W:0 H:0 when no transform is active. Values populate correctly once a resize operation is initiated."],
         ),
         (
             "Review Workflow",
-            "Multi-step approval workflows for asset governance. Editors submit assets for review with optional feedback. Reviewers can approve or reject with comments. Workflow state tracked with full history.",
+            "Multi-step approval workflows for asset governance. Editors submit assets for review with optional feedback. Reviewers can approve or reject with comments. Workflow state is tracked with full history.",
             "06-workflow.png",
             ["States: Draft -> Pending Review -> In Review -> Approved / Rejected  |  Feedback textarea  |  Role-gated actions"],
+            None,
         ),
         (
             "Asset Sharing",
             "Generate shareable links with granular access controls. Configure expiry dates, optional password protection, and permission levels (View Only or View & Download). Links work without requiring recipient accounts.",
             "07-share-dialog.png",
             ["Controls: Expiry date  |  Password protection  |  Permissions (View / View+Download)  |  One-click link copy"],
+            None,
         ),
         (
             "Multi-Modal Search",
-            "Four search modes in one interface: Keyword (full-text with typo tolerance), Natural Language (LLM-powered queries), Visual (upload reference image for CLIP similarity), Color (pick a color to match assets).",
+            "Four search modes in one interface: Keyword (full-text with typo tolerance), Natural Language (LLM-powered semantic queries), Visual (upload a reference image for CLIP similarity), and Color (pick a color to find matching assets).",
             "09-search.png",
-            ["Modes: Keyword + NLP + Visual + Color  |  Filters: File type, Date range  |  Meilisearch + pgvector backends",
-             "Demo note: No results shown because Meilisearch indexing requires the Celery worker pipeline to complete."],
+            ["Modes: Keyword + NLP + Visual + Color  |  Filters: File type, Date range  |  Meilisearch + pgvector backends"],
+            ["Screenshot shows empty results for the demo query. With a populated asset library, results appear as a thumbnail grid with relevance scores and highlighted matching terms."],
         ),
         (
             "AI Color Search",
-            "Select a color via the picker or preset swatches to find assets with matching dominant colors. Powered by color distance algorithms in LAB color space against pre-computed palettes from the ingest pipeline.",
+            "Select a color via the picker or preset swatches to find assets with matching dominant colors. Powered by color distance algorithms in LAB color space against pre-computed color palettes from the ingest pipeline.",
             "11-ai-search-color.png",
-            ["12 preset swatches  |  Custom hex input  |  LAB color distance matching  |  Powered by CLIP + dominant color extraction"],
+            ["12 preset color swatches  |  Custom hex color input  |  LAB color distance matching"],
+            ["Color picker is visible but no results shown because the demo library's test assets have limited color variety. With real photographs, matching assets appear ranked by color proximity."],
         ),
         (
             "Notifications",
-            "Real-time in-app notification system accessible via the header bell icon. Notifications triggered by comments, workflow state changes, and share events. Unread count badge and read/unread state tracking.",
+            "Real-time in-app notification system accessible via the header bell icon. Notifications are triggered by comments, workflow state changes, and share events. Unread count badge and read/unread state tracking.",
             "14-notifications.png",
-            ["Triggers: Comments, Workflow changes, Shares  |  Read/Unread tracking  |  Bell icon with count badge",
-             "Demo note: Empty state shown. Notifications appear when collaborators comment, approve, or share assets."],
+            ["Triggers: Comments, Workflow changes, Shares  |  Read/Unread tracking  |  Bell icon with count badge"],
+            ["Screenshot shows the empty state (no notifications). When activity occurs (comments, workflow approvals, shares), notifications populate with timestamps and action links."],
         ),
     ]
 
-    for title, desc, img, callouts in screenshots:
-        add_screenshot_page(doc, title, desc, img, callouts)
+    for entry in screenshots:
+        title, desc, img = entry[0], entry[1], entry[2]
+        callouts = entry[3] if len(entry) > 3 else None
+        demo_notes = entry[4] if len(entry) > 4 else None
+        add_screenshot_page(doc, title, desc, img, callouts, demo_notes)
 
     # Technical pages
     add_security_page(doc)

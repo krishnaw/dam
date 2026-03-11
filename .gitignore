@@ -59,6 +59,5 @@ e2e/screenshots/
 *.so
 
 # ── Generated files ──────────────────────────────────────
-DAM_Showcase.pdf
 _preview_page_*.png
 e2e/helpers/test-images/
