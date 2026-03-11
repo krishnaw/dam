@@ -1,0 +1,16 @@
+{
+  "name": "dam",
+  "version": "1.0.0",
+  "description": "A self-hosted digital asset management system with AI-powered tagging, full-text search, and S3-compatible storage. Designed for local Docker Compose development with an Azure migration path.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}

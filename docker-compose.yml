@@ -1,0 +1,78 @@
+services:
+  dam-api:
+    build: ./backend
+    ports: ["8000:8000"]
+    env_file: .env
+    depends_on:
+      dam-db:
+        condition: service_healthy
+      dam-redis:
+        condition: service_started
+      dam-search:
+        condition: service_started
+      dam-storage:
+        condition: service_started
+    volumes:
+      - ./backend/app:/app/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  dam-web:
+    build: ./frontend
+    ports: ["3001:3000"]
+    depends_on: [dam-api]
+    volumes:
+      - ./frontend/src:/app/src
+
+  dam-worker:
+    build: ./backend
+    command: celery -A app.tasks.celery_app worker -l info
+    env_file: .env
+    depends_on:
+      dam-db:
+        condition: service_healthy
+      dam-redis:
+        condition: service_started
+      dam-storage:
+        condition: service_started
+
+  dam-db:
+    image: pgvector/pgvector:pg16
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_DB: dam
+      POSTGRES_USER: dam
+      POSTGRES_PASSWORD: dam_dev_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dam"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  dam-redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  dam-search:
+    image: getmeili/meilisearch:v1.12
+    ports: ["7700:7700"]
+    environment:
+      MEILI_MASTER_KEY: dam_dev_meili_key
+    volumes:
+      - meilidata:/meili_data
+
+  dam-storage:
+    image: minio/minio:latest
+    ports: ["9000:9000", "9001:9001"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: dam_dev_user
+      MINIO_ROOT_PASSWORD: dam_dev_password
+    volumes:
+      - miniodata:/data
+
+volumes:
+  pgdata:
+  meilidata:
+  miniodata:
