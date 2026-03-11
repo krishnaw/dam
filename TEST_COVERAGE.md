@@ -6,10 +6,43 @@ Last verified: March 11, 2026
 
 | Suite | Tests | Status |
 |-------|------:|--------|
+| Frontend (unit) | 77 | All passing |
 | Backend (unit) | 119 | All passing |
 | Backend (integration) | 76 | All passing |
 | E2E (Playwright) | 83 | All passing |
-| **Total** | **278** | **All passing** |
+| **Total** | **355** | **All passing** |
+
+## Frontend Unit Tests (77)
+
+### Suites
+
+| Test File | Tests |
+|-----------|------:|
+| Stores (`stores.test.ts`) | 33 |
+| AssetCard (`AssetCard.test.tsx`) | 12 |
+| SearchBar (`SearchBar.test.tsx`) | 9 |
+| API Client (`client.test.ts`) | 8 |
+| Utilities (`utils.test.ts`) | 8 |
+| AssetGrid (`AssetGrid.test.tsx`) | 7 |
+
+### Methodology
+
+- **Framework**: Vitest + React Testing Library
+- **Environment**: jsdom
+- **Mocking**: shadcn/ui components mocked as minimal wrappers, react-router-dom mocked
+- **Stores**: Tested via `getState()` / `setState()` directly (no React rendering needed)
+
+### How to Run
+
+```bash
+cd frontend && npm test
+
+# Watch mode
+cd frontend && npm run test:watch
+
+# Single file
+cd frontend && npx vitest run src/stores/__tests__/stores.test.ts
+```
 
 ## Backend Tests (195)
 
